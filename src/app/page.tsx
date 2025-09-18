@@ -75,7 +75,7 @@ export default function HomePage() {
         {results.map((m) => (
           <li key={m.id} className='rounded-xl border border-gray-200 p-4'>
             {/** poster image */}
-            <div className='flex-gap-4'>
+            <div className='flex gap-4'>
               {m.poster_path ? (
                 <div className="relative h-28 w-20 overflow-hidden rounded-lg">
                   <Image
@@ -98,7 +98,7 @@ export default function HomePage() {
                   {m.release_date || 'Unknown date'}
                 </p>
                 {/** overview */}
-                <p className='mt-2 text-sm text-gray-700'>
+                <p className='mt-2 text-sm text-gray-700 line-clamp-3'>
                   {m.overview || 'No description available.'}
                 </p>
               </div>
