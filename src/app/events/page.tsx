@@ -11,6 +11,7 @@ type EventCard = {
   ticketUrl?: string;
   priceRange?: { min?: number; max?: number; currency?: string };
   categories?: string[];
+  imageUrl?: string;
   venue: {
     name?: string;
     city?: string;
@@ -77,19 +78,19 @@ export default function EventsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Keyword (optional)"
-          className="md:col-span-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="md:col-span-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600"
         />
         <input
           type="date"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600" 
         />
         <input
           type="date"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600"
         />
         <input
           type="number"
@@ -97,7 +98,7 @@ export default function EventsPage() {
           max={200}
           value={radius}
           onChange={(e) => setRadius(Number(e.target.value))}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600"
           placeholder="Radius (km)"
         />
         <button
@@ -126,44 +127,107 @@ export default function EventsPage() {
       )}
 
       {/* Results */}
+      {!loading && !error && events.length === 0 && (
+        <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 text-center text-zinc-300">
+          No events found. Try a different keyword, a larger radius, or another date.
+        </div>
+      )}
       <ul className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 [grid-auto-rows:1fr]">
         {events.map((ev) => (
           <li key={ev.id} className="h-full">
-            <div className="h-full rounded-xl border border-gray-200 p-4">
-              <div className="flex h-full flex-col">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-lg font-semibold">{ev.title}</h2>
-                  {ev.ticketUrl ? (
-                    <a
-                      href={ev.ticketUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
-                    >
-                      Tickets →
-                    </a>
-                  ) : null}
+            <article
+              className="
+                h-full rounded-xl border border-zinc-800/60 bg-zinc-900/60
+                hover:border-zinc-700 hover:shadow-lg hover:-translate-y-0.5
+                transition duration-200
+                p-4
+              "
+            >
+              <div className="flex h-full gap-4">
+                {/* Thumbnail */}
+                <div className="relative hidden sm:block w-32 shrink-0 overflow-hidden rounded-lg">
+                  {ev.imageUrl ? (
+                    <Image
+                      src={ev.imageUrl}
+                      alt={ev.title}
+                      fill
+                      className="object-cover"
+                      sizes="128px"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-zinc-800 to-zinc-700" />
+                  )}
                 </div>
-                <p className="text-xs text-gray-500">
-                  {ev.venue.city ? `${ev.venue.city} — ` : ""}
-                  {ev.venue.name || "Unknown venue"} • {ev.start || "TBA"}
-                </p>
 
-                {/* Spacer grows to fill card */}
-                <div className="flex-1" />
+                {/* Content */}
+                <div className="flex min-h-[7rem] flex-1 flex-col">
+                  {/* Title + CTA */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-white leading-snug">
+                      {ev.title}
+                    </h2>
 
-                {ev.priceRange && (
-                  <p className="mt-2 text-sm text-gray-700">
-                    {ev.priceRange.currency ?? ""} {ev.priceRange.min ?? ""} – {ev.priceRange.max ?? ""}
+                    {ev.ticketUrl && (
+                      <a
+                        href={ev.ticketUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="
+                          inline-flex items-center gap-1 rounded-lg bg-blue-600
+                          px-3 py-1.5 text-sm font-medium text-white
+                          hover:bg-blue-500 focus-visible:outline-none
+                          focus-visible:ring-2 focus-visible:ring-blue-400
+                          focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900
+                          transition
+                        "
+                      >
+                        Tickets
+                        <svg
+                          viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
+                          className="opacity-90"
+                        >
+                          <path fill="currentColor"
+                            d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3zM5 5h5v2H7v10h10v-3h2v5H5V5z"/>
+                        </svg>
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Meta line: city — venue • date */}
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    {ev.venue.city ? `${ev.venue.city} — ` : ""}
+                    {ev.venue.name || "Unknown venue"} •{" "}
+                    {ev.start
+                      ? new Date(ev.start).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
+                      : "TBA"}
                   </p>
-                )}
-                {ev.categories && ev.categories.length > 0 && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    {ev.categories.slice(0, 3).join(" · ")}
-                  </p>
-                )}
+
+                  {/* Badges / price near bottom */}
+                  <div className="mt-2 flex-1" />
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {ev.categories?.slice(0, 2).map((c) => (
+                      <span
+                        key={c}
+                        className="rounded-full border border-zinc-700/70 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300"
+                      >
+                        {c}
+                      </span>
+                    ))}
+
+                    {ev.priceRange && (
+                      <span className="rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 text-xs">
+                        {ev.priceRange.currency ?? ""}{" "}
+                        {ev.priceRange.min ?? ""}{ev.priceRange.max ? ` – ${ev.priceRange.max}` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            </article>
           </li>
         ))}
       </ul>

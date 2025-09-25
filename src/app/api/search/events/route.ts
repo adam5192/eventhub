@@ -16,16 +16,29 @@ const QuerySchema = z.object({
 type NormalizedEvent = {
   id: string;
   title: string;
+  start: string;
+  ticketUrl?: string;
+  priceRange?: { min?: number; max?: number; currency?: string };
+  categories?: string[];
+  imageUrl?: string; // ← NEW
   venue: {
     name: string;
     city?: string;
     coords?: { lat: number; lng: number };
   };
-  start: string; // ISO
-  priceRange?: { min?: number; max?: number; currency?: string };
-  ticketUrl?: string;
-  categories?: string[];
 };
+
+// helper: pick an image around a target width
+function pickImage(images: any[] | undefined, target = 400): string | undefined {
+  if (!Array.isArray(images) || images.length === 0) return undefined;
+  const sorted = [...images].sort((a, b) => {
+    const da = Math.abs((a.width ?? target) - target);
+    const db = Math.abs((b.width ?? target) - target);
+    return da - db;
+  });
+  return sorted[0]?.url;
+}
+
 
 const TM_BASE = "https://app.ticketmaster.com/discovery/v2/events.json";
 
@@ -94,27 +107,22 @@ export async function GET(req: Request) {
         ...(ev.classifications?.map((c: any) => c?.genre?.name).filter(Boolean) ?? []),
       ].filter(Boolean);
 
-      return {
-        id: ev.id,
-        title: ev.name,
-        start: ev.dates?.start?.dateTime ?? ev.dates?.start?.localDate ?? "",
-        ticketUrl: ev.url,
-        priceRange: price
-          ? { min: price.min, max: price.max, currency: price.currency }
+    return {
+      id: ev.id,
+      title: ev.name,
+      start: ev.dates?.start?.dateTime ?? ev.dates?.start?.localDate ?? "",
+      ticketUrl: ev.url,
+      priceRange: price ? { min: price.min, max: price.max, currency: price.currency } : undefined,
+      categories,
+      imageUrl: pickImage(ev.images), // ← NEW
+      venue: {
+        name: venue?.name,
+        city: venue?.city?.name,
+        coords: venue?.location?.latitude && venue?.location?.longitude
+          ? { lat: Number(venue.location.latitude), lng: Number(venue.location.longitude) }
           : undefined,
-        categories,
-        venue: {
-          name: venue?.name,
-          city: venue?.city?.name,
-          coords:
-            venue?.location?.latitude && venue?.location?.longitude
-              ? {
-                  lat: Number(venue.location.latitude),
-                  lng: Number(venue.location.longitude),
-                }
-              : undefined,
-        },
-      };
+      },
+    };
     }) ?? [];
 
   const pageInfo = {
