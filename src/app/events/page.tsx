@@ -39,8 +39,8 @@ export default function EventsPage() {
     p.set("lat", String(center.lat));
     p.set("lng", String(center.lng));
     p.set("radius", String(radius));
-    if (from) p.set("from", new Date(from).toISOString());
-    if (to) p.set("to", new Date(to).toISOString());
+    if (from) p.set("from", from); // send "YYYY-MM-DD"
+    if (to)   p.set("to", to);     // send "YYYY-MM-DD"
     return p.toString();
   }, [q, center.lat, center.lng, radius, from, to]);
 
@@ -209,9 +209,9 @@ export default function EventsPage() {
                   <div className="mt-2 flex-1" />
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {ev.categories?.slice(0, 2).map((c) => (
+                    {ev.categories?.slice(0, 2).map((c, i) => (
                       <span
-                        key={c}
+                        key={`${ev.id}-${c}-${i}`}   // unique even if 'Music' repeats
                         className="rounded-full border border-zinc-700/70 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300"
                       >
                         {c}
