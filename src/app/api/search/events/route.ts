@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 // keep query values clean + safe
-// for dates, accept plain "YYYY-MM-DD" and normalize to ISO manually
+// for dates, accept plain YYYY-MM-DD and normalize to ISO manually
 const QuerySchema = z.object({
   q: z.string().trim().max(80).optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),
@@ -13,7 +13,6 @@ const QuerySchema = z.object({
   page: z.coerce.number().min(0).max(49).default(0),
 });
 
-// shape the UI actually needs
 type NormalizedEvent = {
   id: string;
   title: string;
@@ -35,18 +34,15 @@ const TM_BASE = "https://app.ticketmaster.com/discovery/v2/events.json";
 const cache = new Map<string, { ts: number; data: any }>();
 const TTL_MS = 1000 * 60 * 5; // 5m
 
-// pick a mid-size image (looks crisp without being huge)
-function pickImage(images: any[] | undefined, target = 400): string | undefined {
+// helper: always grab the largest image available
+function pickImage(images: any[] | undefined): string | undefined {
   if (!Array.isArray(images) || images.length === 0) return undefined;
-  const sorted = [...images].sort((a, b) => {
-    const da = Math.abs((a?.width ?? target) - target);
-    const db = Math.abs((b?.width ?? target) - target);
-    return da - db;
-  });
-  return sorted[0]?.url;
+  const sorted = [...images].sort((a, b) => (b.width ?? 0) - (a.width ?? 0));
+  return sorted[0]?.url; // largest width
 }
 
-// --- date helpers (build in LOCAL time, then convert to ISO without ms) ---
+
+// date helpers
 function toIsoNoMs(d: Date): string {
   return d.toISOString().replace(/\.\d{3}Z$/, "Z"); // drop .123Z
 }
@@ -119,7 +115,7 @@ export async function GET(req: Request) {
   params.set("apikey", apiKey);
   params.set("size", "100");
   params.set("page", String(page));
-  params.set("sort", "date,asc");
+  params.set("sort", "relevance,desc");
   params.set("locale", "*");
   if (q) params.set("keyword", q);
   if (lat !== undefined && lng !== undefined) {

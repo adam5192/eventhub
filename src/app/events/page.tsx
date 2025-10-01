@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import EventsMap, { MapEvent } from "../components/EventsMap";
 import Image from "next/image";
+import CitySearchInput from "../components/CitySearchInput";
+
 
 type EventCard = {
   id: string;
@@ -22,15 +24,23 @@ type EventCard = {
 const TORONTO = { lat: 43.6532, lng: -79.3832 };
 
 export default function EventsPage() {
+  // toronto as default center
+  const TORONTO = { lat: 43.6532, lng: -79.3832 };
+
+  // search form state
   const [q, setQ] = useState("");
+  const [from, setFrom] = useState<string>(""); // "YYYY-MM-DD"
+  const [to, setTo] = useState<string>("");
+  const [radius, setRadius] = useState(25);
+
+  // city search state
   const [city, setCity] = useState("Toronto, ON");
   const [center, setCenter] = useState(TORONTO);
-  const [radius, setRadius] = useState(25);
-  const [from, setFrom] = useState<string>("");
-  const [to, setTo] = useState<string>("");
+
+  // data + ui state
   const [loading, setLoading] = useState(false);
-  const [events, setEvents] = useState<EventCard[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventCard[]>([]);
 
   // For demo: fixed center. (Later we’ll wire Places Autocomplete to setCenter.)
   const queryString = useMemo(() => {
@@ -44,26 +54,47 @@ export default function EventsPage() {
     return p.toString();
   }, [q, center.lat, center.lng, radius, from, to]);
 
-  const search = async () => {
+  const search = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
       const r = await fetch(`/api/search/events?${queryString}`);
       const json = await r.json();
-      if (!r.ok) throw new Error(json?.error || "Search failed");
+      if (!r.ok) {
+        // show TM error if the backend forwarded details
+        const msg =
+          json?.details?.fault?.faultstring ||
+          json?.error ||
+          "Search failed";
+        throw new Error(msg);
+      }
       setEvents(json.results || []);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.message || "Search failed");
     } finally {
       setLoading(false);
     }
-  };
+  }, [queryString]);
+
 
   useEffect(() => {
-    // initial load
+    // first load
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // selecting a city updates center
+    search();
+  }, [center, search]);
+
+  const handleCitySelect = useCallback(
+    (place: { desc: string; lat: number; lng: number }) => {
+      setCity(place.desc);        // update the text in the input
+      setCenter({ lat: place.lat, lng: place.lng }); // map + API center
+    }, []
+  );
+
 
   return (
     <main className="mx-auto max-w-5xl p-6">
@@ -74,41 +105,61 @@ export default function EventsPage() {
 
       {/* Controls */}
       <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-6">
+        {/* City picker (2 columns on md+) */}
+        <div className="md:col-span-2">
+          <CitySearchInput
+            value={city}
+            onChange={setCity}
+            onSelect={handleCitySelect}
+            placeholder="Search city (e.g., New York)"
+          />
+        </div>
+
+        {/* Keyword (1 col) */}
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Keyword (optional)"
-          className="md:col-span-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        {/* From date (1 col) */}
         <input
           type="date"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600" 
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        {/* To date (1 col) */}
         <input
           type="date"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500  text-gray-600"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        {/* Radius (km) (1 col) */}
         <input
           type="number"
           min={1}
           max={200}
           value={radius}
           onChange={(e) => setRadius(Number(e.target.value))}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 text-gray-600"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="Radius (km)"
         />
+
+        {/* Search button (full width on small screens) */}
         <button
           onClick={search}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 transition"
           disabled={loading}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? "Searching…" : "Search"}
         </button>
       </div>
+
 
       {/* Map */}
       <div className="mt-6">
@@ -150,9 +201,9 @@ export default function EventsPage() {
                     <Image
                       src={ev.imageUrl}
                       alt={ev.title}
-                      fill
-                      className="object-cover"
-                      sizes="128px"
+                      width={800}
+                      height={450}
+                      className="w-full h-48 object-cover rounded-t-lg"
                     />
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-zinc-800 to-zinc-700" />
