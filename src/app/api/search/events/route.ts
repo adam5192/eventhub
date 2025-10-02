@@ -114,9 +114,9 @@ export async function GET(req: Request) {
   // build TM query
   const params = new URLSearchParams();
   params.set("apikey", apiKey);
-  params.set("size", "100");
+  params.set("size", "20");
   params.set("page", String(page));
-  params.set("sort", "relevance,desc");
+  params.set("sort", "date,asc");
   params.set("locale", "*");
   if (q) params.set("keyword", q);
   if (lat !== undefined && lng !== undefined) {

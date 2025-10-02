@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import EventsMap, { MapEvent } from "../components/EventsMap";
 import Image from "next/image";
 import CitySearchInput from "../components/CitySearchInput";
-import { useDebouncedEffect } from "../hooks/useDebouncedEffect";
 import { useRef } from "react";
+
 
 type EventCard = {
   id: string;
@@ -26,6 +26,11 @@ type EventCard = {
 const TORONTO = { lat: 43.6532, lng: -79.3832 };
 
 export default function EventsPage() {
+  // paging state
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   // toronto as default center
   const TORONTO = { lat: 43.6532, lng: -79.3832 };
 
@@ -44,81 +49,111 @@ export default function EventsPage() {
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<EventCard[]>([]);
 
-  // For demo: fixed center. (Later we’ll wire Places Autocomplete to setCenter.)
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
+
     if (q.trim()) p.set("q", q.trim());
     p.set("lat", String(center.lat));
     p.set("lng", String(center.lng));
     p.set("radius", String(radius));
-    if (from) p.set("from", from); // send "YYYY-MM-DD"
-    if (to)   p.set("to", to);     // send "YYYY-MM-DD"
+    if (from) p.set("from", from);
+    if (to) p.set("to", to);
+
+    // keep server + TM in sync on which page we want
+    p.set("page", String(page));
+
     return p.toString();
-  }, [q, center.lat, center.lng, radius, from, to]);
+  }, [q, center.lat, center.lng, radius, from, to, page]);
 
-  const lastControllerRef = useRef<AbortController | null>(null);
 
-  const search = useCallback(async () => {
-    // cancel any in-flight request (user typed again)
-    if (lastControllerRef.current) {
-      lastControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    lastControllerRef.current = controller;
+  // keep separate controllers (replace vs append)
+  const lastReplaceRef = useRef<AbortController | null>(null);
+  const lastAppendRef = useRef<AbortController | null>(null);
 
-    setError(null);
-    setLoading(true);
+  // tiny helper: merge without dupes
+  function mergeUniqueById<T extends { id: string }>(prev: T[], next: T[]) {
+    const map = new Map(prev.map((e) => [e.id, e]));
+    for (const e of next) map.set(e.id, e);
+    return Array.from(map.values());
+  }
 
-    try {
-      const r = await fetch(`/api/search/events?${queryString}`, {
-        signal: controller.signal,
-      });
-      const json = await r.json();
-      if (!r.ok) {
-        const msg =
-          json?.details?.fault?.faultstring ||
-          json?.error ||
-          "Search failed";
-        throw new Error(msg);
+  const search = useCallback(
+    async (mode: "replace" | "append" = "replace") => {
+      // choose controller based on mode
+      const ref = mode === "replace" ? lastReplaceRef : lastAppendRef;
+
+      // cancel only the same kind of in-flight request
+      if (ref.current) ref.current.abort();
+      const controller = new AbortController();
+      ref.current = controller;
+
+      if (mode === "replace") {
+        setError(null);
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
       }
-      const results = (json.results || []) as EventCard[];
 
-      // optional: client-side sort proxy for popularity
-      results.sort((a, b) => (b.priceRange?.max ?? 0) - (a.priceRange?.max ?? 0));
+      try {
+        const r = await fetch(`/api/search/events?${queryString}`, {
+          signal: controller.signal,
+        });
+        const json = await r.json();
+        console.log("API response:", json);
 
-      setEvents(results);
-    } catch (e: any) {
-      // fetch abort is expected when user types quickly; ignore
-      if (e?.name !== "AbortError") {
-        setError(e?.message || "Search failed");
+        if (!r.ok) {
+          const msg =
+            json?.details?.fault?.faultstring ||
+            json?.error ||
+            "Search failed";
+          throw new Error(msg);
+        }
+
+        const incoming = (json.results || []) as EventCard[];
+
+        // update total pages from API (fallback to 1 if not provided)
+        setTotalPages(json.pageInfo?.totalPages ?? 1);
+
+        if (mode === "append") {
+          setEvents((prev) => mergeUniqueById(prev, incoming));
+        } else {
+          setEvents(incoming);
+        }
+
+      } catch (e: any) {
+        // ignore aborts (expected when typing quickly / switching modes)
+        if (e?.name !== "AbortError") {
+          setError(e?.message || "Search failed");
+        }
+      } finally {
+        if (mode === "replace") setLoading(false);
+        else setLoadingMore(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [queryString]);
-
-  // fire a search only after the user pauses typing for 500ms
-  useDebouncedEffect(
-    () => {
-      search();
-      // cleanup: nothing special here
-      return;
     },
-    [queryString], // runs when q/from/to/radius/center change
-    600 // bump to 600–800ms if still too chatty
+    [queryString]
   );
 
-  // also run once on first mount
+  // when any filter changes, go back to first page and replace results
   useEffect(() => {
-    search();
+    setPage(0);
+    search("replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [q, center, from, to, radius]);
 
-
+  // append only when page > 0 (Load more pressed)
   useEffect(() => {
-    // selecting a city updates center
-    search();
-  }, [center, search]);
+    if (page > 0) {
+      search("append");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  const handleLoadMore = useCallback(() => {
+    if (loadingMore) return;
+    if (page >= totalPages - 1) return;
+    setPage((prev) => prev + 1); // triggers the append effect
+  }, [page, totalPages, loadingMore]);
+
 
   const handleCitySelect = useCallback(
     (place: { desc: string; lat: number; lng: number }) => {
@@ -126,7 +161,6 @@ export default function EventsPage() {
       setCenter({ lat: place.lat, lng: place.lng }); // map + API center
     }, []
   );
-
 
   return (
     <main className="mx-auto max-w-5xl p-6">
@@ -196,14 +230,14 @@ export default function EventsPage() {
 
         {/* Search button (full width on small screens) */}
         <button
-          onClick={search}
+          type="button"                                   // avoid accidental form submit
+          onClick={() => search("replace")}               // pass the expected arg
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 transition"
-          disabled={loading}
+          disabled={loading || loadingMore}
         >
           {loading ? "Searching…" : "Search"}
         </button>
       </div>
-
 
       {/* Map */}
       <div className="mt-6">
@@ -329,6 +363,23 @@ export default function EventsPage() {
           </li>
         ))}
       </ul>
+      {/* Load more */}
+      {!loading && !error && events.length > 0 && page < totalPages - 1 && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="
+              inline-flex items-center justify-center rounded-lg
+              bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100
+              hover:bg-zinc-700 transition
+              disabled:opacity-60 disabled:cursor-not-allowed
+            "
+          >
+            {loadingMore ? "Loading more…" : "Load more"}
+          </button>
+        </div>
+      )}
     </main>
   );
 }
