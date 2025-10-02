@@ -1,10 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import EventsMap, { MapEvent } from "../components/EventsMap";
 import Image from "next/image";
 import CitySearchInput from "../components/CitySearchInput";
-
+import { useDebouncedEffect } from "../hooks/useDebouncedEffect";
+import { useRef } from "react";
 
 type EventCard = {
   id: string;
@@ -54,34 +56,64 @@ export default function EventsPage() {
     return p.toString();
   }, [q, center.lat, center.lng, radius, from, to]);
 
+  const lastControllerRef = useRef<AbortController | null>(null);
+
   const search = useCallback(async () => {
+    // cancel any in-flight request (user typed again)
+    if (lastControllerRef.current) {
+      lastControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    lastControllerRef.current = controller;
+
     setError(null);
     setLoading(true);
+
     try {
-      const r = await fetch(`/api/search/events?${queryString}`);
+      const r = await fetch(`/api/search/events?${queryString}`, {
+        signal: controller.signal,
+      });
       const json = await r.json();
       if (!r.ok) {
-        // show TM error if the backend forwarded details
         const msg =
           json?.details?.fault?.faultstring ||
           json?.error ||
           "Search failed";
         throw new Error(msg);
       }
-      setEvents(json.results || []);
+      const results = (json.results || []) as EventCard[];
+
+      // optional: client-side sort proxy for popularity
+      results.sort((a, b) => (b.priceRange?.max ?? 0) - (a.priceRange?.max ?? 0));
+
+      setEvents(results);
     } catch (e: any) {
-      setError(e.message || "Search failed");
+      // fetch abort is expected when user types quickly; ignore
+      if (e?.name !== "AbortError") {
+        setError(e?.message || "Search failed");
+      }
     } finally {
       setLoading(false);
     }
   }, [queryString]);
 
+  // fire a search only after the user pauses typing for 500ms
+  useDebouncedEffect(
+    () => {
+      search();
+      // cleanup: nothing special here
+      return;
+    },
+    [queryString], // runs when q/from/to/radius/center change
+    600 // bump to 600–800ms if still too chatty
+  );
 
+  // also run once on first mount
   useEffect(() => {
-    // first load
     search();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   useEffect(() => {
     // selecting a city updates center
@@ -104,7 +136,7 @@ export default function EventsPage() {
       </p>
 
       {/* Controls */}
-      <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-6">
+      <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-6 text-gray-500">
         {/* City picker (2 columns on md+) */}
         <div className="md:col-span-2">
           <CitySearchInput
