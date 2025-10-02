@@ -144,6 +144,7 @@ export default function EventsPage() {
             onChange={setCity}
             onSelect={handleCitySelect}
             placeholder="Search city (e.g., New York)"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full"
           />
         </div>
 
@@ -172,15 +173,26 @@ export default function EventsPage() {
         />
 
         {/* Radius (km) (1 col) */}
-        <input
-          type="number"
-          min={1}
-          max={200}
-          value={radius}
-          onChange={(e) => setRadius(Number(e.target.value))}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Radius (km)"
-        />
+        <div className="relative">
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={radius}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              // clamp between 1 and 200
+              if (val < 1) setRadius(1);
+              else if (val > 200) setRadius(200);
+              else setRadius(val);
+            }}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pr-10 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Distance (km)"
+          />
+          <span className="absolute inset-y-0 right-3 flex items-center text-gray-400 text-sm">
+            km
+          </span>
+        </div>
 
         {/* Search button (full width on small screens) */}
         <button
@@ -290,24 +302,27 @@ export default function EventsPage() {
 
                   {/* Badges / price near bottom */}
                   <div className="mt-2 flex-1" />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {Array.from(new Set(ev.categories ?? []))  // remove duplicates
+                        .filter(Boolean)                         // skip empty values
+                        .slice(0, 2)                             // only show first 2
+                        .map((c) => (
+                          <span
+                            key={`${ev.id}-${c}`}                // stable + unique
+                            className="rounded-full border border-zinc-700/70 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300"
+                          >
+                            {c}
+                          </span>
+                        ))}
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {ev.categories?.slice(0, 2).map((c, i) => (
-                      <span
-                        key={`${ev.id}-${c}-${i}`}   // unique even if 'Music' repeats
-                        className="rounded-full border border-zinc-700/70 bg-zinc-800/60 px-2.5 py-1 text-xs text-zinc-300"
-                      >
-                        {c}
-                      </span>
-                    ))}
-
-                    {ev.priceRange && (
-                      <span className="rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 text-xs">
-                        {ev.priceRange.currency ?? ""}{" "}
-                        {ev.priceRange.min ?? ""}{ev.priceRange.max ? ` – ${ev.priceRange.max}` : ""}
-                      </span>
-                    )}
-                  </div>
+                      {ev.priceRange && (
+                        <span className="rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2.5 py-1 text-xs">
+                          {ev.priceRange.currency ?? ""}{" "}
+                          {ev.priceRange.min ?? ""}
+                          {ev.priceRange.max ? ` – ${ev.priceRange.max}` : ""}
+                        </span>
+                      )}
+                    </div>
                 </div>
               </div>
             </article>

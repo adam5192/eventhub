@@ -202,8 +202,15 @@ export async function GET(req: Request) {
     return ms >= startMs && ms <= endMs;
   });
 
-  // keep results sorted just in case
+  // sort by date first (earliest → latest)
   filtered.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+
+  // then bias toward events that actually have a ticketUrl
+  filtered.sort((a, b) => {
+    const aHas = a.ticketUrl ? 1 : 0;
+    const bHas = b.ticketUrl ? 1 : 0;
+    return bHas - aHas;
+  });
 
   const pageInfo = {
     page: raw?.page?.number ?? 0,
@@ -215,4 +222,5 @@ export async function GET(req: Request) {
   if (!nocache) cache.set(cacheKey, { ts: Date.now(), data });
 
   return NextResponse.json(data);
+
 }
